@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Speech-to-Speech Bot</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet"> 
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #1a1a1a; 
+            color: #f0f0f0; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        h1 {
+            color: #f0f0f0; 
+            margin-bottom: 20px;
+        }
+
+        button {
+            display: flex;
+            align-items: center; 
+            padding: 15px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff; 
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease, transform 0.3s ease; 
+            position: relative;
+            overflow: hidden;
+            margin-bottom: 10px; 
+        }
+
+        button:hover {
+            background-color: #0056b3; 
+            transform: scale(1.05);
+        }
+
+        .stop-button {
+            padding: 10px 20px;
+            background-color: #dc3545; 
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            color: white;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        .stop-button:hover {
+            background-color: #c82333; 
+        }
+
+        .pulse {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% {
+                transform: scale(1.05);
+                opacity: 0.7;
+            }
+            100% {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .listening {
+            animation: listening 1s infinite;
+            background-color: #ffc107; 
+        }
+
+        @keyframes listening {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+        }
+
+        .processing {
+            animation: processing 1s infinite;
+        }
+
+        @keyframes processing {
+            0%, 100% {
+                transform: scale(1);
+                background-color: #28a745; 
+            }
+            50% {
+                transform: scale(1.1);
+                background-color: #155724; 
+            }
+        }
+
+        .speaking {
+            animation: speaking 0.6s infinite;
+            background-color: #ff5722;
+        }
+
+        @keyframes speaking {
+            0%, 100% {
+                transform: scale(1);
+                background-color: #ff5722;
+            }
+            50% {
+                transform: scale(1.1);
+                background-color: #ff7043;
+            }
+        }
+
+        .progress {
+            width: 100%;
+            height: 5px;
+            background-color: #555; 
+            border-radius: 5px;
+            overflow: hidden;
+            position: relative;
+            display: none;
+        }
+
+        .progress-bar {
+            height: 100%;
+            width: 0;
+            background-color: #007bff; 
+            position: absolute;
+            left: 0;
+            top: 0;
+            transition: width 0.3s ease;
+        }
+
+        audio {
+            display: none; 
+        }
+
+        .material-icons {
+            margin-right: 8px; 
+        }
+    </style>
+</head>
+<body>
+    <h1>Speech-to-Speech Bot</h1>
+    <button id="speakButton" onclick="captureAudio()">
+        <span class="material-icons">mic</span> Speak 
+    </button>
+    <button class="stop-button" id="stopButton" onclick="stopListening()" style="display:none;">
+        <span class="material-icons">stop</span> Stop Listening
+    </button>
+    <div class="progress" id="progress">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <audio id="responseAudio" controls></audio>
+
+    <script>
+        let isListening = false; 
+        let listeningTimeout;
+        let mediaRecorder;
+
+        async function captureAudio() {
+            const progress = document.getElementById('progress');
+            const progressBar = document.getElementById('progressBar');
+            const speakButton = document.getElementById('speakButton');
+            const stopButton = document.getElementById('stopButton');
+
+            speakButton.classList.add('listening');
+            speakButton.classList.remove('pulse');
+            speakButton.innerHTML = '<span class="material-icons">mic</span> Listening...'; 
+            isListening = true; 
+            stopButton.style.display = 'inline-block'; 
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            let audioChunks = [];
+
+            mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+            
+            progress.style.display = 'block';
+            progressBar.style.width = '0%';
+
+            mediaRecorder.onstart = () => {
+                let startTime = Date.now();
+                const updateProgress = setInterval(() => {
+                    const elapsedTime = Date.now() - startTime;
+                    const percentage = Math.min((elapsedTime / 5000) * 100, 100);
+                    progressBar.style.width = percentage + '%';
+                    if (percentage >= 100) {
+                        clearInterval(updateProgress);
+                    }
+                }, 50);
+            };
+
+            mediaRecorder.onstop = async () => {
+                clearTimeout(listeningTimeout);
+
+                speakButton.classList.remove('listening');
+                speakButton.classList.add('processing');
+                speakButton.innerHTML = '<span class="material-icons">hourglass_empty</span> Processing...'; 
+
+                const audioBlob = new Blob(audioChunks);
+                const formData = new FormData();
+                formData.append('audio', audioBlob);
+                
+                const response = await fetch('/process_audio/', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await response.json();
+
+                progress.style.display = 'none';
+                progressBar.style.width = '0%';
+
+                speakButton.classList.remove('processing');
+                speakButton.classList.add('speaking');
+                speakButton.innerHTML = '<span class="material-icons">volume_up</span> Speaking...'; 
+
+                if (data.audio_url) {
+                    playAudio(data.audio_url);
+                }
+
+                stopButton.style.display = 'none';
+            };
+
+            mediaRecorder.start();
+
+            listeningTimeout = setTimeout(() => {
+                isListening = false; 
+                stopButton.style.display = 'none'; 
+                speakButton.innerHTML = '<span class="material-icons">mic</span> Speak'; 
+            }, 8000); 
+
+            setTimeout(() => mediaRecorder.stop(), 5000); 
+        }
+
+        function playAudio(url) {
+            const audioElement = document.getElementById('responseAudio');
+            audioElement.src = url;
+            audioElement.play();
+
+            const speakButton = document.getElementById('speakButton');
+            audioElement.onended = () => {
+                speakButton.classList.remove('speaking');
+                speakButton.classList.add('pulse');
+                speakButton.innerHTML = '<span class="material-icons">mic</span> Speak'; 
+                if (isListening) {
+                    captureAudio(); 
+                }
+            };
+        }
+
+        function stopListening() {
+            if (mediaRecorder && isListening) {
+                mediaRecorder.stop(); 
+                isListening = false; 
+                document.getElementById('speakButton').innerHTML = '<span class="material-icons">mic</span> Speak';
+                document.getElementById('stopButton').style.display = 'none'; 
+            }
+        }
+    </script>
+</body>
+</html>
