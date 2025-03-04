@@ -1,6 +1,6 @@
 # Speech Bot
 
-Speech Bot is a powerful tool designed to convert speech to text and perform various natural language processing tasks.
+Speech Bot is a powerful tool designed to convert speech to speech and perform various natural language processing tasks.
 
 ## Features
 
